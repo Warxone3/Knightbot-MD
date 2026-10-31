@@ -6,7 +6,7 @@ async function helpCommand(sock, chatId, message) {
     const helpMessage = `
 ╔═══════════════════╗
    *🤖 ${settings.botName || 'KnightBot-MD'}*  
-   Version: *${settings.version || '2.0.5'}*
+   Version: *${settings.version || '3.0.0'}*
    by ${settings.botOwner || 'Mr Unique Hacker'}
    YT : ${global.ytch}
 ╚═══════════════════╝
@@ -31,9 +31,11 @@ async function helpCommand(sock, chatId, message) {
 ║ ➤ .groupinfo
 ║ ➤ .staff or .admins 
 ║ ➤ .vv
+║ ➤ .vv2
 ║ ➤ .trt <text> <lang>
 ║ ➤ .ss <link>
 ║ ➤ .jid
+║ ➤ .url
 ╚═══════════════════╝ 
 
 ╔═══════════════════╗
@@ -52,11 +54,18 @@ async function helpCommand(sock, chatId, message) {
 ║ ➤ .clear
 ║ ➤ .tag <message>
 ║ ➤ .tagall
+║ ➤ .tagnotadmin
+║ ➤ .hidetag <message>
 ║ ➤ .chatbot
 ║ ➤ .resetlink
 ║ ➤ .antitag <on/off>
 ║ ➤ .welcome <on/off>
 ║ ➤ .goodbye <on/off>
+║ ➤ .antibot <on/off/set/get>
+║ ➤ .setgdesc <description>
+║ ➤ .setgname <new name>
+║ ➤ .setgpp (reply to image)
+║ ➤ .groupstatus [caption/text]
 ╚═══════════════════╝
 
 ╔═══════════════════╗
@@ -66,13 +75,19 @@ async function helpCommand(sock, chatId, message) {
 ║ ➤ .antidelete
 ║ ➤ .cleartmp
 ║ ➤ .update
+║ ➤ .settings
 ║ ➤ .setpp <reply to image>
 ║ ➤ .autoreact <on/off>
 ║ ➤ .autostatus <on/off>
 ║ ➤ .autostatus react <on/off>
+║ ➤ .savestatus [on/off]
 ║ ➤ .autotyping <on/off>
 ║ ➤ .autoread <on/off>
 ║ ➤ .anticall <on/off>
+║ ➤ .pmblocker <on/off/status>
+║ ➤ .pmblocker setmsg <text>
+║ ➤ .setmention <reply to msg>
+║ ➤ .mention <on/off>
 ╚═══════════════════╝
 
 ╔═══════════════════╗
@@ -82,7 +97,7 @@ async function helpCommand(sock, chatId, message) {
 ║ ➤ .sticker <reply to image>
 ║ ➤ .removebg
 ║ ➤ .remini
-║ ➤ .crop <reply to image>
+║ ➤ .crop (reply sticker/image/video)
 ║ ➤ .tgsticker <Link>
 ║ ➤ .meme
 ║ ➤ .take <packname> 
@@ -114,10 +129,12 @@ async function helpCommand(sock, chatId, message) {
 
 ╔═══════════════════╗
 🤖 *AI Commands*:
+║ ➤ .ai <question>
 ║ ➤ .gpt <question>
 ║ ➤ .gemini <question>
 ║ ➤ .imagine <prompt>
 ║ ➤ .flux <prompt>
+║ ➤ .sora <prompt>
 ╚═══════════════════╝
 
 ╔═══════════════════╗
@@ -161,8 +178,10 @@ async function helpCommand(sock, chatId, message) {
 📥 *Downloader*:
 ║ ➤ .play <song_name>
 ║ ➤ .song <song_name>
+║ ➤ .spotify <query>
 ║ ➤ .instagram <link>
 ║ ➤ .facebook <link>
+║ ➤ .twitter <link>
 ║ ➤ .tiktok <link>
 ║ ➤ .video <song name>
 ║ ➤ .ytmp4 <Link>
@@ -190,9 +209,6 @@ async function helpCommand(sock, chatId, message) {
 
 ╔═══════════════════╗
 🖼️ *ANIME*:
-║ ➤ .neko
-║ ➤ .waifu
-║ ➤ .loli
 ║ ➤ .nom 
 ║ ➤ .poke 
 ║ ➤ .cry 

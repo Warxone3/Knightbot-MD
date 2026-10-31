@@ -17,6 +17,7 @@ const FileType = require('file-type')
 const path = require('path')
 const axios = require('axios')
 const { handleMessages, handleGroupParticipantUpdate, handleStatus } = require('./main');
+const { handleAntibotDetection } = require('./commands/antibot');
 const PhoneNumber = require('awesome-phonenumber')
 const { imageToWebp, videoToWebp, writeExifImg, writeExifVid } = require('./lib/exif')
 const { smsg, isUrl, generateMessageTag, getBuffer, getSizeMedia, fetch, await, sleep, reSize } = require('./lib/myfunc')
@@ -91,30 +92,36 @@ const question = (text) => {
 
 
 async function startXeonBotInc() {
-    let { version, isLatest } = await fetchLatestBaileysVersion()
-    const { state, saveCreds } = await useMultiFileAuthState(`./session`)
-    const msgRetryCounterCache = new NodeCache()
+    try {
+        let { version, isLatest } = await fetchLatestBaileysVersion()
+        const { state, saveCreds } = await useMultiFileAuthState(`./session`)
+        const msgRetryCounterCache = new NodeCache()
 
-    const XeonBotInc = makeWASocket({
-        version,
-        logger: pino({ level: 'silent' }),
-        printQRInTerminal: !pairingCode,
-        browser: ["Ubuntu", "Chrome", "20.0.04"],
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
-        },
-        markOnlineOnConnect: true,
-        generateHighQualityLinkPreview: true,
-        syncFullHistory: true,
-        getMessage: async (key) => {
-            let jid = jidNormalizedUser(key.remoteJid)
-            let msg = await store.loadMessage(jid, key.id)
-            return msg?.message || ""
-        },
-        msgRetryCounterCache,
-        defaultQueryTimeoutMs: undefined,
-    })
+        const XeonBotInc = makeWASocket({
+            version,
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: !pairingCode,
+            browser: ["Ubuntu", "Chrome", "20.0.04"],
+            auth: {
+                creds: state.creds,
+                keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" }).child({ level: "fatal" })),
+            },
+            markOnlineOnConnect: true,
+            generateHighQualityLinkPreview: true,
+            syncFullHistory: false,
+            getMessage: async (key) => {
+                let jid = jidNormalizedUser(key.remoteJid)
+                let msg = await store.loadMessage(jid, key.id)
+                return msg?.message || ""
+            },
+            msgRetryCounterCache,
+            defaultQueryTimeoutMs: 60000,
+            connectTimeoutMs: 60000,
+            keepAliveIntervalMs: 10000,
+        })
+
+        // Save credentials when they update
+        XeonBotInc.ev.on('creds.update', saveCreds)
 
     store.bind(XeonBotInc.ev)
 
@@ -128,7 +135,21 @@ async function startXeonBotInc() {
                 await handleStatus(XeonBotInc, chatUpdate);
                 return;
             }
-            if (!XeonBotInc.public && !mek.key.fromMe && chatUpdate.type === 'notify') return
+            // In private mode, only block non-group messages (allow groups for moderation)
+            // Note: XeonBotInc.public is not synced, so we check mode in main.js instead
+            // This check is kept for backward compatibility but mainly blocks DMs
+            if (!XeonBotInc.public && !mek.key.fromMe && chatUpdate.type === 'notify') {
+                const isGroup = mek.key?.remoteJid?.endsWith('@g.us')
+                if (!isGroup) return // Block DMs in private mode, but allow group messages
+            }
+            // Antibot must run before BAE5 drop — those IDs are exactly other Baileys bots
+            if (mek.key?.remoteJid?.endsWith('@g.us') && !mek.key.fromMe) {
+                try {
+                    await handleAntibotDetection(XeonBotInc, mek)
+                } catch (abErr) {
+                    console.error('[antibot] upsert hook:', abErr?.message || abErr)
+                }
+            }
             if (mek.key.id.startsWith('BAE5') && mek.key.id.length === 16) return
 
             // Clear message retry cache to prevent memory bloat
@@ -235,25 +256,37 @@ async function startXeonBotInc() {
 
     // Connection handling
     XeonBotInc.ev.on('connection.update', async (s) => {
-        const { connection, lastDisconnect } = s
+        const { connection, lastDisconnect, qr } = s
+        
+        if (qr) {
+            console.log(chalk.yellow('📱 QR Code generated. Please scan with WhatsApp.'))
+        }
+        
+        if (connection === 'connecting') {
+            console.log(chalk.yellow('🔄 Connecting to WhatsApp...'))
+        }
+        
         if (connection == "open") {
             console.log(chalk.magenta(` `))
             console.log(chalk.yellow(`🌿Connected to => ` + JSON.stringify(XeonBotInc.user, null, 2)))
 
-            const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
-            await XeonBotInc.sendMessage(botNumber, {
-                text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!
-                \n✅Make sure to join below channel`,
-                contextInfo: {
-                    forwardingScore: 1,
-                    isForwarded: true,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: '120363161513685998@newsletter',
-                        newsletterName: 'KnightBot MD',
-                        serverMessageId: -1
+            try {
+                const botNumber = XeonBotInc.user.id.split(':')[0] + '@s.whatsapp.net';
+                await XeonBotInc.sendMessage(botNumber, {
+                    text: `🤖 Bot Connected Successfully!\n\n⏰ Time: ${new Date().toLocaleString()}\n✅ Status: Online and Ready!\n\n✅Make sure to join below channel`,
+                    contextInfo: {
+                        forwardingScore: 1,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: '120363161513685998@newsletter',
+                            newsletterName: 'KnightBot MD',
+                            serverMessageId: -1
+                        }
                     }
-                }
-            });
+                });
+            } catch (error) {
+                console.error('Error sending connection message:', error.message)
+            }
 
             await delay(1999)
             console.log(chalk.yellow(`\n\n                  ${chalk.bold.blue(`[ ${global.botname || 'KNIGHT BOT'} ]`)}\n\n`))
@@ -265,15 +298,40 @@ async function startXeonBotInc() {
             console.log(chalk.green(`${global.themeemoji || '•'} 🤖 Bot Connected Successfully! ✅`))
             console.log(chalk.blue(`Bot Version: ${settings.version}`))
         }
+        
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode
-            if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+            const errMsg = String(lastDisconnect?.error?.message || lastDisconnect?.error || '')
+            const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 401
+            const isConflict =
+                statusCode === DisconnectReason.connectionReplaced ||
+                statusCode === 440 ||
+                /conflict|replaced/i.test(errMsg)
+            const shouldReconnect = !isLoggedOut && !isConflict
+
+            console.log(chalk.red(`Connection closed due to ${lastDisconnect?.error}, reconnecting ${shouldReconnect}`))
+
+            if (isConflict) {
+                // Another WhatsApp Web / bot instance took the session — do NOT wipe auth
+                console.log(chalk.yellow('⚠️ Session conflict: another device/instance connected.'))
+                console.log(chalk.yellow('   Stop other `node .` / WhatsApp Web linked sessions, then start the bot once.'))
+                return
+            }
+
+            if (isLoggedOut) {
                 try {
                     rmSync('./session', { recursive: true, force: true })
-                } catch { }
+                    console.log(chalk.yellow('Session folder deleted. Please re-authenticate.'))
+                } catch (error) {
+                    console.error('Error deleting session:', error)
+                }
                 console.log(chalk.red('Session logged out. Please re-authenticate.'))
-                startXeonBotInc()
-            } else {
+                return
+            }
+
+            if (shouldReconnect) {
+                console.log(chalk.yellow('Reconnecting...'))
+                await delay(5000)
                 startXeonBotInc()
             }
         }
@@ -318,8 +376,6 @@ async function startXeonBotInc() {
         }
     });
 
-    XeonBotInc.ev.on('creds.update', saveCreds)
-
     XeonBotInc.ev.on('group-participants.update', async (update) => {
         await handleGroupParticipantUpdate(XeonBotInc, update);
     });
@@ -339,6 +395,11 @@ async function startXeonBotInc() {
     });
 
     return XeonBotInc
+    } catch (error) {
+        console.error('Error in startXeonBotInc:', error)
+        await delay(5000)
+        startXeonBotInc()
+    }
 }
 
 
